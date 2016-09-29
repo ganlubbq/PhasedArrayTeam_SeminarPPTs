@@ -1,0 +1,224 @@
+clear;
+
+%clc;
+%% Init and Settings
+RotateAngle=80:0.1:90;
+for AngleCounter=1:1:length(RotateAngle)
+  OrignalRight=0;
+  RACRight=0;
+  tic;
+  parfor StaticCounter=1:500
+    ExpSetting=struct('SampleFrequency',48000, ...
+                        'WaveSpeed',340, ...
+                        'SNR',10, ...
+                        'TimeSnaps',200);
+
+    SignalSetting=struct( 'SignalNum',2, ...
+                             'SignalFrequency',[1000,1000], ...
+                             'IncidentAngle',[round(unifrnd(35,45)),round(unifrnd(65,75))], ...
+                             'Power',[0,0]);
+                         
+%     SignalSetting=struct( 'SignalNum',1, ...
+%                              'SignalFrequency',[1000], ...
+%                              'IncidentAngle',[50,], ...
+%                              'Power',[0]);
+                         
+%     SignalSetting=struct( 'SignalNum',2, ...
+%                              'SignalFrequency',[1000,1000], ...
+%                              'IncidentAngle',[round(unifrnd(5,175)),round(unifrnd(5,175))], ...
+%                              'Power',[0,0]);
+
+    ArraySetting=struct(  'ElementNum',3, ...
+                            'ElementSpacingTime',2, ...
+                            'AssistArrayElementSpacingTime',2,...
+                            'AssistArrayRotateAngle',RotateAngle(AngleCounter));
+
+    Signal=struct(        'SignalNum',SignalSetting.SignalNum, ...
+                            'DigitalFrequency',SignalSetting.SignalFrequency.*2*pi./ExpSetting.SampleFrequency, ...
+                            'WaveLength',ExpSetting.WaveSpeed./SignalSetting.SignalFrequency, ...
+                            'IncidentAngle',SignalSetting.IncidentAngle, ...
+                            'RotateIncidentAngle_P',double.empty, ...
+                            'RotateIncidentAngle_N',double.empty, ...
+                            'SteeringSpacing',double.empty(), ...
+                            'SteeringVectors',double.empty(), ...
+                            'AssistSteeringSpacing_P',double.empty(), ...
+                            'AssistSteeringVectors_P',double.empty(), ...
+                            'AssistSteeringSpacing_N',double.empty(), ...
+                            'AssistSteeringVectors_N',double.empty());
+
+    Array=struct(         'ElementNum',3, ...
+                            'ElementSpacing',3*min(Signal.WaveLength), ...
+                            'SteeringAngles',0:0.5:180, ...
+                            'SteeringSpacing',double.empty(), ...
+                            'SteeringVectors',double.empty(), ...
+                            'MusicSpectrum',double.empty(), ...
+                            'RxSignal', double.empty(), ...
+                            'RMatrixTime',double.empty(), ...
+                            'RMatrix',double.empty(), ...
+                            'NoiseBase',double.empty(), ...
+                            'MusicSpectrumMean',double.empty(), ...
+                            'MusicVar',double.empty(), ...
+                            'MusicBound',double.empty());
+
+    AssistArray_P=struct(   'ElementNum',ArraySetting.ElementNum, ...
+                            'ElementSpacing',ArraySetting.AssistArrayElementSpacingTime*min(Signal.WaveLength), ...
+                            'RotateAngle',ArraySetting.AssistArrayRotateAngle, ...
+                            'SteeringAngles',0:0.5:180, ...
+                            'SteeringSpacing',double.empty(), ...
+                            'SteeringVectors',double.empty(), ...
+                            'MusicSpectrum',double.empty(), ...
+                            'RxSignal', double.empty(), ...
+                            'RMatrixTime',double.empty(), ...
+                            'RMatrix',double.empty(), ...
+                            'NoiseBase',double.empty());
+
+    AssistArray_N=struct(   'ElementNum',ArraySetting.ElementNum, ...
+                            'ElementSpacing',ArraySetting.AssistArrayElementSpacingTime*min(Signal.WaveLength), ...
+                            'RotateAngle',ArraySetting.AssistArrayRotateAngle, ...
+                            'SteeringAngles',0:0.5:180, ...
+                            'SteeringSpacing',double.empty(), ...
+                            'SteeringVectors',double.empty(), ...
+                            'MusicSpectrum',double.empty(), ...
+                            'RxSignal', double.empty(), ...
+                            'RMatrixTime',double.empty(), ...
+                            'RMatrix',double.empty(), ...
+                            'NoiseBase',double.empty());
+    tic
+      Signal.RotateIncidentAngle_P=SignalSetting.IncidentAngle+AssistArray_P.RotateAngle;
+      Signal.RotateIncidentAngle_N=SignalSetting.IncidentAngle-AssistArray_N.RotateAngle;
+      Array.SteeringSpacing=2*pi*SignalSetting.SignalFrequency(1).*Array.ElementSpacing.*cosd(Array.SteeringAngles)./ExpSetting.WaveSpeed;
+      for Counter=1:1:Array.ElementNum
+        Array.SteeringVectors(Counter,:)=exp(-1i*(Counter-1).*Array.SteeringSpacing);
+      end
+
+      AssistArray_P.SteeringSpacing=2*pi*SignalSetting.SignalFrequency(1).*AssistArray_P.ElementSpacing.*cosd(AssistArray_P.SteeringAngles+ArraySetting.AssistArrayRotateAngle)./ExpSetting.WaveSpeed;
+      for Counter=1:1:AssistArray_P.ElementNum
+        AssistArray_P.SteeringVectors(Counter,:)=exp(-1i*(Counter-1).*AssistArray_P.SteeringSpacing);
+      end
+
+      AssistArray_N.SteeringSpacing=2*pi*SignalSetting.SignalFrequency(1).*AssistArray_N.ElementSpacing.*cosd(AssistArray_N.SteeringAngles-ArraySetting.AssistArrayRotateAngle)./ExpSetting.WaveSpeed;
+      for Counter=1:1:AssistArray_N.ElementNum
+        AssistArray_N.SteeringVectors(Counter,:)=exp(-1i*(Counter-1).*AssistArray_N.SteeringSpacing);
+      end
+
+      Signal.SteeringSpacing=2*pi*SignalSetting.SignalFrequency(1).*Array.ElementSpacing.*cosd(Signal.IncidentAngle)./ExpSetting.WaveSpeed;
+      for Counter=1:1:Array.ElementNum
+        Signal.SteeringVectors(Counter,:)=exp(-1i*(Counter-1).*Signal.SteeringSpacing);
+      end
+
+      Signal.AssistSteeringSpacing_P=2*pi*SignalSetting.SignalFrequency(1).*AssistArray_P.ElementSpacing.*cosd(Signal.RotateIncidentAngle_P)./ExpSetting.WaveSpeed;
+      for Counter=1:1:AssistArray_P.ElementNum
+        Signal.AssistSteeringVectors_P(Counter,:)=exp(-1i*(Counter-1).*Signal.AssistSteeringSpacing_P);
+      end
+
+      Signal.AssistSteeringSpacing_N=2*pi*SignalSetting.SignalFrequency(1).*AssistArray_N.ElementSpacing.*cosd(Signal.RotateIncidentAngle_N)./ExpSetting.WaveSpeed;
+      for Counter=1:1:AssistArray_N.ElementNum
+        Signal.AssistSteeringVectors_N(Counter,:)=exp(-1i*(Counter-1).*Signal.AssistSteeringSpacing_N);
+      end
+
+      for Counter=1:1:ExpSetting.TimeSnaps
+        Array.RxSignal(:,Counter)=Signal.SteeringVectors*sqrt(2)*[cos(Signal.DigitalFrequency(1)*Counter);sin(Signal.DigitalFrequency(1)*Counter)];
+      end
+
+      for Counter=1:1:Array.ElementNum
+        Array.RxSignal(Counter,:)=awgn(Array.RxSignal(Counter,:),ExpSetting.SNR,'measured');
+      end
+
+      for Counter=1:1:ExpSetting.TimeSnaps
+        AssistArray_P.RxSignal(:,Counter)=Signal.AssistSteeringVectors_P*sqrt(2)*[cos(Signal.DigitalFrequency(1)*Counter);sin(Signal.DigitalFrequency(1)*Counter)];
+      end
+      for Counter=1:1:AssistArray_P.ElementNum
+        AssistArray_P.RxSignal(Counter,:)=awgn(AssistArray_P.RxSignal(Counter,:),ExpSetting.SNR,'measured');
+      end
+
+      for Counter=1:1:ExpSetting.TimeSnaps
+        AssistArray_N.RxSignal(:,Counter)=Signal.AssistSteeringVectors_N*sqrt(2)*[cos(Signal.DigitalFrequency(1)*Counter);sin(Signal.DigitalFrequency(1)*Counter)];
+      end
+      for Counter=1:1:AssistArray_N.ElementNum
+        AssistArray_N.RxSignal(Counter,:)=awgn(AssistArray_N.RxSignal(Counter,:),ExpSetting.SNR,'measured');
+      end
+
+      for Counter=1:1:ExpSetting.TimeSnaps
+        Array.RMatrixTime(:,:,Counter)=Array.RxSignal(:,Counter)*(Array.RxSignal(:,Counter))';
+      end
+      Array.RMatrix=sum(Array.RMatrixTime,3)/ExpSetting.TimeSnaps;
+
+      for Counter=1:1:ExpSetting.TimeSnaps
+        AssistArray_P.RMatrixTime(:,:,Counter)=AssistArray_P.RxSignal(:,Counter)*(AssistArray_P.RxSignal(:,Counter))';
+      end
+      AssistArray_P.RMatrix=sum(AssistArray_P.RMatrixTime,3)/ExpSetting.TimeSnaps;
+
+      for Counter=1:1:ExpSetting.TimeSnaps
+        AssistArray_N.RMatrixTime(:,:,Counter)=AssistArray_N.RxSignal(:,Counter)*(AssistArray_N.RxSignal(:,Counter))';
+      end
+      AssistArray_N.RMatrix=sum(AssistArray_N.RMatrixTime,3)/ExpSetting.TimeSnaps;
+
+
+      [U,S,V]=svd(Array.RMatrix);
+      Array.NoiseBase=U(:,Signal.SignalNum+1:end);
+
+      [U,S,V]=svd(AssistArray_P.RMatrix);
+      AssistArray_P.NoiseBase=U(:,Signal.SignalNum+1:end);
+
+      [U,S,V]=svd(AssistArray_N.RMatrix);
+      AssistArray_N.NoiseBase=U(:,Signal.SignalNum+1:end);
+
+      for Counter=1:1:size(Array.SteeringAngles,2)
+        Array.MusicSpectrum(Counter)=abs(inv((Array.SteeringVectors(:,Counter))'*Array.NoiseBase*Array.NoiseBase'*Array.SteeringVectors(:,Counter)));
+      end
+      Array.MusicSpectrum=Array.MusicSpectrum./max(Array.MusicSpectrum);
+
+      for Counter=1:1:size(AssistArray_P.SteeringAngles,2)
+        AssistArray_P.MusicSpectrum(Counter)=abs(inv((AssistArray_P.SteeringVectors(:,Counter))'*AssistArray_P.NoiseBase*AssistArray_P.NoiseBase'*AssistArray_P.SteeringVectors(:,Counter)));
+      end
+
+      for Counter=1:1:size(AssistArray_N.SteeringAngles,2)
+        AssistArray_N.MusicSpectrum(Counter)=abs(inv((AssistArray_N.SteeringVectors(:,Counter))'*AssistArray_N.NoiseBase*AssistArray_N.NoiseBase'*AssistArray_N.SteeringVectors(:,Counter)));
+      end
+      ResultSpectrum=(AssistArray_P.MusicSpectrum.*AssistArray_N.MusicSpectrum).^(1/2);%.*Array.MusicSpectrum).^(1/3);
+      ResultSpectrum=ResultSpectrum./max(ResultSpectrum);
+      
+%       figure(1)
+%       plot(Array.SteeringAngles,Array.MusicSpectrum,'r:',Array.SteeringAngles,ResultSpectrum,'b');
+%       set(gca,'Xlim',[0,180],'XTick',0:5:180);
+      
+      
+      [CheckOrg,CheckOrgIndex]=findpeaks(Array.MusicSpectrum);
+      [~,Peak1]=max(CheckOrg);
+      CheckOrg(Peak1)=CheckOrg(Peak1)-CheckOrg(Peak1);
+      [~,Peak2]=max(CheckOrg);
+      if (abs(Array.SteeringAngles(CheckOrgIndex(Peak1))-SignalSetting.IncidentAngle(1))<=5 || abs(Array.SteeringAngles(CheckOrgIndex(Peak1))-SignalSetting.IncidentAngle(2))<=5) && (abs(Array.SteeringAngles(CheckOrgIndex(Peak2))-SignalSetting.IncidentAngle(1))<=5 || abs(Array.SteeringAngles(CheckOrgIndex(Peak2))-SignalSetting.IncidentAngle(2))<=5)
+          OrignalRight=OrignalRight+1;
+      end
+      
+      [CheckImp,CheckImpIndex]=findpeaks(ResultSpectrum);
+      [~,Peak1]=max(CheckImp);
+      CheckImp(Peak1)=CheckImp(Peak1)-CheckImp(Peak1);
+      [~,Peak2]=max(CheckImp);
+      if (abs(Array.SteeringAngles(CheckImpIndex(Peak1))-SignalSetting.IncidentAngle(1))<=5 || abs(Array.SteeringAngles(CheckImpIndex(Peak1))-SignalSetting.IncidentAngle(2))<=5) && (abs(Array.SteeringAngles(CheckImpIndex(Peak2))-SignalSetting.IncidentAngle(1))<=5 || abs(Array.SteeringAngles(CheckImpIndex(Peak2))-SignalSetting.IncidentAngle(2))<=5)
+          RACRight=RACRight+1;
+      end
+      
+%       CheckOrg=Array.MusicSpectrum;
+%       [~,Peak1]=max(CheckOrg);
+%       CheckOrg(Peak1)=CheckOrg(Peak1)-CheckOrg(Peak1);
+%       [~,Peak2]=max(CheckOrg);
+%       if (Array.SteeringAngles(Peak1)==SignalSetting.IncidentAngle(1) || Array.SteeringAngles(Peak1)==SignalSetting.IncidentAngle(2)) && (Array.SteeringAngles(Peak2)==SignalSetting.IncidentAngle(1) || Array.SteeringAngles(Peak2)==SignalSetting.IncidentAngle(2))
+%           OrignalRight=OrignalRight+1;
+%       end
+%       
+%       CheckImp=ResultSpectrum;
+%       [~,Peak1]=max(CheckImp);
+%       CheckImp(Peak1)=CheckImp(Peak1)-CheckImp(Peak1);
+%       [~,Peak2]=max(CheckImp);
+%       if (Array.SteeringAngles(Peak1)==SignalSetting.IncidentAngle(1) || Array.SteeringAngles(Peak1)==SignalSetting.IncidentAngle(2)) && (Array.SteeringAngles(Peak2)==SignalSetting.IncidentAngle(1) || Array.SteeringAngles(Peak2)==SignalSetting.IncidentAngle(2))
+%           RACRight=RACRight+1;
+%       end
+  end
+  toc;
+  disp(RotateAngle(AngleCounter));
+  OriginalRightRate(AngleCounter)=OrignalRight/500;
+  RACRightRate(AngleCounter)=RACRight/500;
+  disp(OriginalRightRate(AngleCounter));
+  disp(RACRightRate(AngleCounter));
+end
